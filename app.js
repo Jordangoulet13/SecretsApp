@@ -1,5 +1,5 @@
 //jshint esversion:6
-require('dotenv').config()
+require('dotenv').config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
@@ -40,13 +40,16 @@ mongoose.set('useCreateIndex', true)
 const userSchema = new mongoose.Schema({
   email: String,
   password: String,
-  googleId: String
+  googleId: String,
+  secret: String
 });
 
 userSchema.plugin(passportLocalMongoose);
 userSchema.plugin(findOrCreate);
 
 const User = new mongoose.model("User", userSchema);
+
+passport.use(User.createStrategy());
 
 passport.serializeUser(function(user, done) {
   done(null, user.id);
@@ -82,13 +85,13 @@ app.get("/", function(req, res) {
 });
 
 app.get("/auth/google",
-  passport.authenticate("google", {
+  passport.authenticate('google', {
     scope: ["profile"]
   })
 );
 
 app.get("/auth/google/secrets",
-  passport.authenticate("google", { failureRedirect: "/login" }),
+  passport.authenticate('google', { failureRedirect: "/login" }),
   function(req, res) {
     // Successful authentication, redirect secrets.
     res.redirect('/secrets');
@@ -103,12 +106,43 @@ app.get("/register", function(req, res) {
 });
 
 app.get("/secrets", function(req, res) {
+User.find({"secret":{$ne: null}}, function(err, foundUsers){
+  if(err){
+    console.log(err);
+  }else{
+    if(foundUsers){
+      res.render("secrets",{usersWithSecrets: foundUsers} );
+    }
+  }
+
+});
+});
+
+app.get("/submit", function(req, res){
   if (req.isAuthenticated()) {
-    res.render("secrets");
+    res.render("submit");
   } else {
+    console.log("error");
     res.redirect("/login");
   }
 });
+
+app.post("/submit", function(req, res){
+  const submittedSecret = req.body.secret;
+User.findById(req.user.id, function(err, foundUser){
+  if(err){
+    console.log(err);
+  }else{
+    if(foundUser){
+      foundUser.secret = submittedSecret;
+      foundUser.save(function(){
+        res.redirect("/secrets");
+      })
+    }
+  }
+})
+
+})
 
 app.get("/logout", function(req, res) {
   req.logout();
@@ -116,9 +150,7 @@ app.get("/logout", function(req, res) {
 });
 
 app.post("/register", function(req, res) {
-  User.register({
-    username: req.body.username
-  }, req.body.password, function(err, user) {
+  User.register({username: req.body.username}, req.body.password, function(err, user) {
     if (err) {
       console.log(err);
       res.redirect("/register");
